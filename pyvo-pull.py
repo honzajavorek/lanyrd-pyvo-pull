@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
+import os
 import sys
 
 import yaml
@@ -9,11 +10,25 @@ import requests
 from lxml import html
 
 
+def render_event(filename, event):
+    with open(filename, 'w') as f:
+        yaml.dump(event, f, default_flow_style=False, allow_unicode=True)
+
+
+def create_filename(event):
+    date = event['start'][0:10]
+    if event['topic']:
+        return '{} {}.yaml'.format(date, event['topic'])
+    return '{}.yaml'.format(date)
+
+
 def pull_event_series(url):
     tree = scrape(url)
-    for link in tree.cssselect('.conference-listing .url'):
-        url = link.get('href')
-        yield pull_event(url)
+    events = (
+        pull_event(link.get('href')) for link
+        in tree.cssselect('.conference-listing .url')
+    )
+    return text(tree, 'h1'), events
 
 
 def pull_event(url):
@@ -28,6 +43,9 @@ def pull_event(url):
         name = title
         topic = None
 
+    # series
+    series_name = text(tree, '.series a')
+
     # description
     desc = text(tree, '#event-description') or None
 
@@ -37,7 +55,11 @@ def pull_event(url):
 
     time_str = text(tree, '.time')
     if time_str:
-        start_time = arrow.get(time_str, 'HA')
+        try:
+            start_time = arrow.get(time_str, 'H:mmA')
+        except arrow.parser.ParserError:
+            start_time = arrow.get(time_str, 'HA')
+
         start = '{} {}'.format(
             start_date.format('YYYY-MM-DD'),
             start_time.format('HH:mm')
@@ -77,6 +99,7 @@ def pull_event(url):
     # compose the final object
     return {
         'name': name,
+        'series': series_name,
         'topic': topic,
         'start': start,
         'description': desc,
@@ -125,11 +148,15 @@ if __name__ == '__main__':
     url = sys.argv[1]
 
     if '/series/' in url:
-        results = pull_event_series(url)
+        series_name, events = pull_event_series(url)
+        output_dir = os.path.join(os.getcwd(), series_name)
+        os.makedirs(output_dir, exist_ok=True)
     else:
-        results = [pull_event(url)]
+        events = [pull_event(url)]
+        output_dir = os.getcwd()
 
-    for result in results:
-        doc = yaml.dump(result, default_flow_style=False)
-        print('---')
-        print(doc)
+    print('Directory: {}'.format(output_dir))
+    for event in events:
+        filename = create_filename(event)
+        print("Rendering '{}'".format(filename))
+        render_event(os.path.join(output_dir, filename), event)
