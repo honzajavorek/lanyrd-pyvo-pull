@@ -14,3 +14,8 @@ python pyvo-pull.py "http://lanyrd.com/2015/brno-pyvo-april/"
 ```
 
 Creates file `2015-04-30 Freelancing.yaml`.
+
+## Requirements
+
+- Python 3
+- `requirements.txt`
