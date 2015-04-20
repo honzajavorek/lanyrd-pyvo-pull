@@ -3,11 +3,13 @@
 
 import os
 import sys
+import re
 
 import yaml
 import arrow
 import requests
 from lxml import html
+import unidecode
 
 
 def render_event(filename, event):
@@ -15,10 +17,20 @@ def render_event(filename, event):
         yaml.dump(event, f, default_flow_style=False, allow_unicode=True)
 
 
+def slugify(name):
+    """Make a filename-friendly approximation of a string
+
+    The result only uses the characters a-z, 0-9, _, -
+    """
+    decoded = unidecode.unidecode(name).lower()
+    return re.sub('[^a-z0-9_]+', '-', decoded).strip('-')
+
+
 def create_filename(event):
     date = event['start'][0:10]
-    if event['topic']:
-        return '{} {}.yaml'.format(date, event['topic'])
+    topic = event['topic']
+    if topic:
+        return '{}-{}.yaml'.format(date, slugify(topic))
     return '{}.yaml'.format(date)
 
 
@@ -149,7 +161,7 @@ if __name__ == '__main__':
 
     if '/series/' in url:
         series_name, events = pull_event_series(url)
-        output_dir = os.path.join(os.getcwd(), series_name)
+        output_dir = os.path.join(os.getcwd(), slugify(series_name))
         os.makedirs(output_dir, exist_ok=True)
     else:
         events = [pull_event(url)]
