@@ -14,7 +14,7 @@ import unidecode
 
 def render_event(filename, event):
     with open(filename, 'w') as f:
-        yaml.dump(event, f, default_flow_style=False, allow_unicode=True)
+        yaml.safe_dump(event, f, default_flow_style=False, allow_unicode=True)
 
 
 def slugify(name):
