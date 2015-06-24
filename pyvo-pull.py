@@ -44,7 +44,7 @@ def slugify(name):
 
 def create_filename(event):
     date = event['start'].strftime('%Y-%m-%d')
-    topic = event['topic']
+    topic = event.get('topic')
     if topic:
         return '{}-{}.yaml'.format(date, slugify(topic))
     return '{}.yaml'.format(date)
@@ -131,10 +131,12 @@ def pull_event(url):
     # compose the final object
     eventinfo = collections.OrderedDict()
     eventinfo['start'] = start
-    eventinfo['topic'] = topic
+    if topic:
+        eventinfo['topic'] = topic
     eventinfo['name'] = name
     eventinfo['series'] = series_name
-    eventinfo['description'] = desc
+    if desc:
+        eventinfo['description'] = desc
     eventinfo['venue'] = venue_info
     eventinfo['talks'] = talks
     eventinfo['urls'] = [url]
