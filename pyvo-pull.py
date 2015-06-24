@@ -13,6 +13,11 @@ import requests
 from lxml import html
 import unidecode
 
+CITY_BY_SERIES = {
+    'Brněnské PyVo + BRUG': 'Brno',
+    'Pražské PyVo': 'Praha',
+    'Ostravské Pyvo s Rubači': 'Ostrava',
+}
 
 class EventDumper(yaml.SafeDumper):
     def __init__(self, *args, **kwargs):
@@ -56,7 +61,9 @@ def pull_event_series(url):
         pull_event(link.get('href')) for link
         in tree.cssselect('.conference-listing .url')
     )
-    return text(tree, 'h1'), events
+    series_name = text(tree, 'h1')
+    city = CITY_BY_SERIES[series_name]
+    return city, events
 
 
 def pull_event(url):
@@ -77,8 +84,10 @@ def pull_event(url):
             name = title
             topic = None
 
-    # series
+    # city -- this depends on series
+    # (so Brno Pyvo will have city 'Brno' even if it was a trip to Bratislava)
     series_name = text(tree, '.series a')
+    event_city = CITY_BY_SERIES[series_name]
 
     # description
     desc = text(tree, '#event-description') or None
@@ -136,13 +145,13 @@ def pull_event(url):
 
     # compose the final object
     eventinfo = collections.OrderedDict()
+    eventinfo['city'] = event_city
     eventinfo['start'] = start
     eventinfo['name'] = name
     if event_number is not None:
         eventinfo['number'] = event_number
     if topic:
         eventinfo['topic'] = topic
-    eventinfo['series'] = series_name
     if desc:
         eventinfo['description'] = desc
     eventinfo['venue'] = venue_info
