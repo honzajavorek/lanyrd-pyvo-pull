@@ -4,6 +4,8 @@
 import os
 import sys
 import re
+import collections
+import datetime
 
 import yaml
 import arrow
@@ -12,9 +14,23 @@ from lxml import html
 import unidecode
 
 
+class EventDumper(yaml.SafeDumper):
+    def __init__(self, *args, **kwargs):
+        kwargs['default_flow_style'] = False
+        kwargs['allow_unicode'] = True
+        super(EventDumper, self).__init__(*args, **kwargs)
+
+def _dict_representer(dumper, data):
+    return dumper.represent_mapping(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+        data.items())
+
+EventDumper.add_representer(collections.OrderedDict, _dict_representer)
+
+
 def render_event(filename, event):
     with open(filename, 'w') as f:
-        yaml.safe_dump(event, f, default_flow_style=False, allow_unicode=True)
+        yaml.dump(event, f, Dumper=EventDumper)
 
 
 def slugify(name):
@@ -27,7 +43,7 @@ def slugify(name):
 
 
 def create_filename(event):
-    date = event['start'][0:10]
+    date = event['start'].strftime('%Y-%m-%d')
     topic = event['topic']
     if topic:
         return '{}-{}.yaml'.format(date, slugify(topic))
@@ -65,62 +81,85 @@ def pull_event(url):
     timestamp = meta(tree, 'lanyrdcom:start_date')
     start_date = arrow.get(timestamp)
 
-    time_str = text(tree, '.time')
+    time_str = text(tree, '.dtstart .time')
     if time_str:
         try:
             start_time = arrow.get(time_str, 'H:mmA')
         except arrow.parser.ParserError:
             start_time = arrow.get(time_str, 'HA')
 
-        start = '{} {}'.format(
-            start_date.format('YYYY-MM-DD'),
-            start_time.format('HH:mm')
-        )
+        start_date = start_date.replace(hour=start_time.hour,
+                                        minute=start_time.minute,
+                                        second=start_time.second)
+        start = start_date.naive
     else:
-        start = start_date.format('YYYY-MM-DD')
+        start = start_date.date()
 
     # venue
+    venue_info = collections.OrderedDict()
+    venue_info['city'] = text(tree, '.prominent-place .sub-place')
     try:
         venue = tree.cssselect('.venue')[0]
     except IndexError:
-        venue_name = text(tree, '.sub-place')
-        address_lines = []
+        venue_info['name'] = text(tree, '.sub-place')
     else:
-        venue_name = text(venue, 'h3')
+        venue_info['name'] = text(venue, 'h3')
 
-        address_lines = []
-        for p in venue.cssselect('p'):
-            if not len(p):
-                address_lines.append(p.text_content().strip())
-
+        venue_info['address'] = '\n'.join([p.text_content().strip()
+                                           for p in venue.cssselect('p')
+                                           if not len(p)])
 
     # location
-    location = '{};{}'.format(
-        meta(tree, 'place:location:latitude'),
-        meta(tree, 'place:location:longitude')
-    )
+    venue_info['location'] = collections.OrderedDict()
+    venue_info['location']['latitude'] = meta(tree, 'place:location:latitude')
+    venue_info['location']['longitude'] = meta(tree, 'place:location:longitude')
 
     # talks
     talks = []
     for talk in tree.cssselect('.session-detail'):
-        talks.append('{}: {}'.format(
-            text(talk, 'p a'),
-            text(talk, 'h3 a'),
-        ))
+        talkinfo = collections.OrderedDict()
+        talks.append(talkinfo)
+        talkinfo['title'] = text(talk, 'h3 a')
+        for speaker_p in talk.cssselect('p'):
+            speaker_text = speaker_p.text_content()
+            speaker_text = speaker_text.replace('presented by', '')
+            talkinfo['speakers'] = [t.strip()
+                                    for t in speaker_text.split(' and ')]
+        for link in talk.cssselect('h3 a'):
+            add_coverage(talkinfo, link.attrib['href'])
 
     # compose the final object
-    return {
-        'name': name,
-        'series': series_name,
-        'topic': topic,
-        'start': start,
-        'description': desc,
-        'venue': venue_name,
-        'address': '\n'.join(address_lines) or None,
-        'location': location,
-        'talks': talks,
-        'links': [url],
-    }
+    eventinfo = collections.OrderedDict()
+    eventinfo['start'] = start
+    eventinfo['topic'] = topic
+    eventinfo['name'] = name
+    eventinfo['series'] = series_name
+    eventinfo['description'] = desc
+    eventinfo['venue'] = venue_info
+    eventinfo['talks'] = talks
+    eventinfo['urls'] = [url]
+    return eventinfo
+
+
+def add_coverage(talk, url):
+    talk['urls'] = [url]
+    coverage = talk['coverage'] = []
+
+    tree = scrape(url)
+    for item in tree.cssselect('#coverage .coverage-item'):
+        classes = set(item.attrib['class'].split())
+        classes.discard('coverage-item')
+        for cls in classes:
+            coverage_type = {
+                'coverage-slides': 'slides',
+                'coverage-video': 'video',
+                'coverage-links': 'link',
+                'coverage-writeups': 'writeup',
+                'coverage-notes': 'notes',
+                'coverage-sketchnotes': 'notes',
+            }[cls]
+        for link in item.cssselect('h3 a'):
+            coverage.append({coverage_type: link.attrib['href']})
 
 
 def scrape(url):
@@ -136,13 +175,11 @@ def scrape(url):
 
 def text(tree, css):
     elements = tree.cssselect(css)
-    try:
-        element = elements[0]
-    except IndexError:
+    if not elements:
         return ''
-    else:
-        content = element.text_content() or ''
-        return content.strip()
+    [element] = elements
+    content = element.text_content() or ''
+    return content.strip()
 
 
 def meta(tree, property_name):
