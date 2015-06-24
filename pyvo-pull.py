@@ -64,12 +64,18 @@ def pull_event(url):
 
     # title
     title = meta(tree, 'name')
-    parts = title.split(':')
+    event_number = None
+    parts = re.split(':| - | – ', title, maxsplit=1)
     if len(parts) > 1:
         name, topic = (part.strip() for part in parts)
     else:
-        name = title
-        topic = None
+        parts = re.split(r'#([0-9]+)', title, maxsplit=1)
+        if len(parts) > 1:
+            name, event_number, topic = (part.strip() for part in parts)
+            event_number = int(event_number)
+        else:
+            name = title
+            topic = None
 
     # series
     series_name = text(tree, '.series a')
@@ -131,9 +137,11 @@ def pull_event(url):
     # compose the final object
     eventinfo = collections.OrderedDict()
     eventinfo['start'] = start
+    eventinfo['name'] = name
+    if event_number is not None:
+        eventinfo['number'] = event_number
     if topic:
         eventinfo['topic'] = topic
-    eventinfo['name'] = name
     eventinfo['series'] = series_name
     if desc:
         eventinfo['description'] = desc
