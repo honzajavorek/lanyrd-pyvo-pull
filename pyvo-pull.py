@@ -134,12 +134,25 @@ def pull_event(url):
     for talk in tree.cssselect('.session-detail'):
         talkinfo = collections.OrderedDict()
         talks.append(talkinfo)
-        talkinfo['title'] = text(talk, 'h3 a')
+        title = text(talk, 'h3 a')
+        talkinfo['title'] = title
+        for lightning_regex in [
+                '^Lightning talk: (?P<title>.*)$',
+                '^(?P<title>.*) \(Lightning talk\)$',
+                '^(?P<title>Lightning talks?)$',
+                ]:
+            match = re.match(lightning_regex, title, re.IGNORECASE)
+            if match:
+                talkinfo['lightning'] = True
+                talkinfo['title'] = title = match.group('title')
+                break
+        else:
+            assert 'lightning' not in title.lower(), title
         for speaker_p in talk.cssselect('p'):
             speaker_text = speaker_p.text_content()
             speaker_text = speaker_text.replace('presented by', '')
-            talkinfo['speakers'] = [t.strip()
-                                    for t in speaker_text.split(' and ')]
+            split_text = re.split(' and |,', speaker_text)
+            talkinfo['speakers'] = [t.strip() for t in split_text]
         for link in talk.cssselect('h3 a'):
             add_coverage(talkinfo, link.attrib['href'])
 
