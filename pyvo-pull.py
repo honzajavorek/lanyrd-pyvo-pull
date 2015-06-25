@@ -138,8 +138,8 @@ def pull_event(url):
         for speaker_p in talk.cssselect('p'):
             speaker_text = speaker_p.text_content()
             speaker_text = speaker_text.replace('presented by', '')
-            talkinfo['speakers'] = [t.strip()
-                                    for t in speaker_text.split(' and ')]
+            split_text = re.split(' and |,', speaker_text)
+            talkinfo['speakers'] = [t.strip() for t in split_text]
         for link in talk.cssselect('h3 a'):
             add_coverage(talkinfo, link.attrib['href'])
 
