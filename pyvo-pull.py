@@ -154,7 +154,7 @@ def pull_event(url):
             split_text = re.split(' and |,', speaker_text)
             talkinfo['speakers'] = [t.strip() for t in split_text]
         for link in talk.cssselect('h3 a'):
-            add_coverage(talkinfo, link.attrib['href'])
+            scrape_talk_page(talkinfo, link.attrib['href'])
 
     # compose the final object
     eventinfo = collections.OrderedDict()
@@ -173,7 +173,7 @@ def pull_event(url):
     return eventinfo
 
 
-def add_coverage(talk, url):
+def scrape_talk_page(talk, url):
     talk['urls'] = [url]
     coverage = talk['coverage'] = []
 
@@ -192,6 +192,10 @@ def add_coverage(talk, url):
             }[cls]
         for link in item.cssselect('h3 a'):
             coverage.append({coverage_type: link.attrib['href']})
+
+    description = text(tree, '.description')
+    if description:
+        talk['description'] = description
 
 
 def scrape(url):
