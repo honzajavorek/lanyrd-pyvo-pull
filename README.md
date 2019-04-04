@@ -1,3 +1,6 @@
+This repository is archived. [Lanyrd.com](lanyrd.com) has been unavailable for years, so the tool will no longer work.
+
+
 # lanyrd-pyvo-pull
 Simple script for pulling information from Lanyrd event and serializing them into YAML
 
